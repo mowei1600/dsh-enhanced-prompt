@@ -449,6 +449,66 @@ Error: ... failed to parse overlay ...: YAMLException: duplicated mapping key (2
 
 ---
 
+## 7.11 v1.4.1：在真实 DSH 里验证 `github:` 安装
+
+目标：证明他人可以用 `github:mowei1600/dsh-enhanced-prompt` 这种格式装进 DSH 并真正被加载，
+而不只是在临时目录里跑通 pnpm。
+
+环境：DSH NEXT Desktop `2.0.21-next`、Harness `0.2.1-rc.4`、profile `desktop`（正在运行）。
+
+做法（等价于插件管理器的 `install_bundle`：DSH 会用 `git ls-remote` 校验后用 pnpm 安装；
+当前会话没有暴露 `plugin_manager` 工具，所以直接在 profile 里执行同一步）：
+
+```powershell
+cd $env:USERPROFILE\.dsh\profiles\desktop
+$env:HTTPS_PROXY='http://127.0.0.1:7890'
+pnpm add github:mowei1600/dsh-enhanced-prompt
+```
+
+结果：
+
+```text
+[WARN] Replaced "dsh-enhanced-prompt" ("link:../../plugins/dsh-enhanced-prompt")
+       with "github:mowei1600/dsh-enhanced-prompt" from a different source.
++ dsh-enhanced-prompt 1.4.1
+Done in 19.6s using pnpm v12.18.0
+```
+
+`package.json` 的依赖变为 `"dsh-enhanced-prompt": "github:mowei1600/dsh-enhanced-prompt"`，
+`dsh.profile.bundles` 里本来就有该 bundle（安装器写入过），无需改动。
+
+**如何证明加载的不是旧链接目录**：给 `node_modules/dsh-enhanced-prompt/index.js` 打上
+`VERSION = '9.9.9-installed'` 哨兵，再重启 DSH（绕过插件管理器时，运行期解析表不会被重新发布，
+只有重启才会从 `package.json` 重新解析）。Host 日志出现：
+
+```text
+[enhanced-prompt] activated v9.9.9-installed strategy=llm style=natural/normal route=magpie/…(default) …
+```
+
+即 Host 确实加载了 **pnpm 从 GitHub 装出来的那份**，而不是 `$DSH_HOME/plugins/…` 的本地链接。
+随后把哨兵还原为发布内容（与仓库 `index.js` 逐字节一致），通过一次 patch 变更触发重组，
+日志回到 `activated v1.4.1`，桥接口 `ping` 返回 `{"version":"1.4.1"}`。
+
+功能冒烟（同一份 GitHub 安装副本）：
+
+```text
+POST /enhance/api {"op":"enhance","text":"帮我写个周报"}
+-> ok=true chars=214 ms=2354 provider=magpie   （返回可直接发送的中文提示词）
+POST /enhance/api {"op":"settings"}
+-> {"includeHistory":true,"historyMessages":6,"historyChars":2000,…}
+```
+
+同时验证了插件管理器会读取的清单字段：`dsh.bundle.patch` 指向存在的 `cordis.patch.yml`、
+`exports["./client"]` 存在、`engines.dsh = ">=0.2.1-rc.4"`（v1.4.1 新增，用于兼容性判断）。
+DSH 的简写解析正则是 `/^(?:github|gitlab|bitbucket|gist):/i`，`github:mowei1600/dsh-enhanced-prompt`
+与其 `#v1.4.1` 形式都能命中。
+
+结论：**该仓库可以通过 `github:mowei1600/dsh-enhanced-prompt` 在 DSH 中安装并正常加载**；
+用插件管理器的正式路径安装时无需重启（管理器会发布运行期解析并触发 HMR 重组），
+手工 `pnpm add` 等价操作则需要重启一次。
+
+---
+
 ## 7.10 v1.4.0：开源仓库化与「从 GitHub 安装」
 
 目标：把插件变成一个可被他人从 GitHub 直接安装的开源项目。
