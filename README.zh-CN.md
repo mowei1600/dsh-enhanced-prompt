@@ -3,6 +3,7 @@
 [English](./README.md) | 简体中文
 
 [![CI](https://github.com/mowei1600/dsh-enhanced-prompt/actions/workflows/ci.yml/badge.svg)](https://github.com/mowei1600/dsh-enhanced-prompt/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/mowei1600/dsh-enhanced-prompt?display_name=tag)](https://github.com/mowei1600/dsh-enhanced-prompt/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
 把输入框里那句粗糙的话，用**你正在用的模型**、结合**当前会话上下文**，一键改写成**可以直接发送的提示词**。

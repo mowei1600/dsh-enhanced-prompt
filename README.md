@@ -3,6 +3,7 @@
 English | [简体中文](./README.zh-CN.md)
 
 [![CI](https://github.com/mowei1600/dsh-enhanced-prompt/actions/workflows/ci.yml/badge.svg)](https://github.com/mowei1600/dsh-enhanced-prompt/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/mowei1600/dsh-enhanced-prompt?display_name=tag)](https://github.com/mowei1600/dsh-enhanced-prompt/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-blue.svg)](./package.json)
 

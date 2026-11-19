@@ -1,9 +1,11 @@
 # Publishing this repository
 
 > **Status: published.** `main` and the annotated tag `v1.4.0` are on
-> <https://github.com/mowei1600/dsh-enhanced-prompt>. A fresh clone from GitHub was verified to
-> pass all 85 tests and to produce a valid install plan, so the `github:` install path is live.
-> Remaining one-time steps are the repository settings in section 2.
+> <https://github.com/mowei1600/dsh-enhanced-prompt>, the CI workflow is green on both pushed
+> commits, and the release is live:
+> <https://github.com/mowei1600/dsh-enhanced-prompt/releases/tag/v1.4.0>. A fresh clone from
+> GitHub was verified to pass all 85 tests and to produce a valid install plan, so the `github:`
+> install path is live. Remaining one-time steps are the repository settings in section 2.
 
 The repository is complete locally (single commit, tag `v1.4.0`, `origin` configured). This guide
 keeps the push/settings/verification steps for future releases and forks.
