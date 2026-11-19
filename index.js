@@ -32,7 +32,7 @@ import { recentTurns, renderHistory } from './lib/history.js'
 import { readSettings, writeSettings, mergeSettings, normalizeSettings, settingsPath } from './lib/settings.js'
 
 /** Plugin version, kept in sync with package.json. */
-export const VERSION = '1.4.0'
+export const VERSION = '1.4.1'
 
 /** Cordis plugin name (also the loader row id by default). */
 export const name = 'enhanced-prompt'

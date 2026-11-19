@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format loosely foll
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] — 2026-11-20
+
+### Added
+
+- `engines.dsh: ">=0.2.1-rc.4"` so the DSH plugin manager can evaluate compatibility explicitly
+  instead of relying on the "no requirement declared" fallback.
+- Install docs show the pinned form `github:mowei1600/dsh-enhanced-prompt#v1.4.1` next to the
+  floating `main` form.
+
+### Verified
+
+- `pnpm add github:mowei1600/dsh-enhanced-prompt` installs the bundle with `client.js`,
+  `cordis.patch.yml`, `lib/`, `locale/` and `icon.svg`, and the manifest passes the bundle/engines
+  checks the plugin manager performs.
+
 ## [1.4.0] — 2026-11-20
 
 ### Added

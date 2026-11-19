@@ -31,6 +31,15 @@
 DSH 会先用 `git ls-remote` 校验仓库，再通过 pnpm 安装并自动选中该 bundle。也可以直接填仓库 URL：
 `https://github.com/mowei1600/dsh-enhanced-prompt`。
 
+想固定版本（不跟随 `main`）就在后面加标签或提交号：
+
+```jsonc
+{ "action": "install_bundle", "target": "github:mowei1600/dsh-enhanced-prompt#v1.4.1" }
+```
+
+Fork 同样可用，把 owner/仓库名换掉即可。包内声明了 `engines.dsh: ">=0.2.1-rc.4"`，插件管理器会在
+激活前做兼容性检查。
+
 ### 方式 B：一行命令安装器
 
 PowerShell：

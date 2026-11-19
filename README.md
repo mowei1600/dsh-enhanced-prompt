@@ -40,6 +40,15 @@ DSH verifies the repository with `git ls-remote` and installs it through pnpm; t
 selected automatically. You can also paste the plain repository URL as `target`:
 `https://github.com/mowei1600/dsh-enhanced-prompt`.
 
+Pin a release instead of following `main` by appending the tag (or a commit SHA):
+
+```jsonc
+{ "action": "install_bundle", "target": "github:mowei1600/dsh-enhanced-prompt#v1.4.1" }
+```
+
+Forks work the same way — replace the owner/repository in the spec. The package declares
+`engines.dsh: ">=0.2.1-rc.4"`, which the plugin manager checks before activating the bundle.
+
 ### Option B — one-liner installer (clone + local install)
 
 PowerShell:
