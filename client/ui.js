@@ -1,0 +1,587 @@
+/**
+ * Browser half of dsh-enhanced-prompt (template).
+ *
+ * NOT shipped as-is: `scripts/build-client.mjs` wraps this file into the DSH
+ * Client module loader shape (`window.__ModuleLoader__.load({ id, factory })`)
+ * and stamps the plugin version.
+ *
+ * Placement: `conversation.input.right` is a list slot rendered inside the
+ * composer's bottom control row, immediately BEFORE the model seat, so the
+ * entry is a 28x28 round icon button next to the model selector.
+ *
+ * Two controls:
+ *   ✦  enhance  — POST /enhance/api {op:'enhance'}; the Host rewrites the draft
+ *                 with the configured model, using this session's recent turns
+ *                 as context, and the result replaces the draft in place.
+ *   ⚙  settings — POST /enhance/api {op:'settings'|'saveSettings'}; edits the
+ *                 plugin's own settings file, applied on the next rewrite.
+ *
+ * Only the session standard kit is used: `useInput((s) => s.draft)` to read and
+ * `inputActions.setDraft(text)` to write. `setDraft` is a history-merge write,
+ * so restore is ours and is withdrawn once the draft is edited.
+ */
+
+const h = React.createElement
+
+const VERSION = '__PLUGIN_VERSION__'
+const ENDPOINT = '/enhance/api'
+
+const LABELS = (() => {
+  let zh = true
+  try {
+    const lang = String((typeof navigator !== 'undefined' && navigator.language) || '')
+    if (lang) zh = /^zh/i.test(lang)
+  } catch { /* keep zh */ }
+  return zh
+    ? {
+      enhance: '增强',
+      undo: '恢复原文',
+      settings: '增强提示词设置',
+      busy: '正在用模型改写…',
+      enhanceTitle: '增强提示词：用当前模型并结合本会话上下文改写输入（会消耗 token）',
+      undoTip: '恢复成增强之前的内容（编辑过增强结果后不再显示）',
+      failed: '增强失败',
+      empty: '输入为空',
+      save: '保存',
+      saved: '已保存',
+      close: '关闭',
+      loading: '读取设置…',
+      title: '增强提示词设置',
+      strategy: '改写方式',
+      style: '输出风格',
+      length: '输出长度',
+      language: '输出语言',
+      history: '携带会话上下文',
+      historyMessages: '上下文轮数',
+      historyChars: '上下文字数上限',
+      extra: '额外要求（会追加到改写规则）',
+      provider: '模型 provider（留空=默认）',
+      model: '模型 model（留空=默认）',
+      timeout: '超时 ms',
+      strategyLlm: '模型改写（花 token）',
+      strategyRule: '离线规则引擎',
+      styleNatural: '提示词正文',
+      styleStructured: '分节模板',
+      lengthShort: '短',
+      lengthNormal: '中',
+      lengthDetailed: '长',
+      auto: '自动识别',
+      zh: '中文',
+      en: 'English',
+    }
+    : {
+      enhance: 'Enhance',
+      undo: 'Restore',
+      settings: 'Enhanced prompt settings',
+      busy: 'Rewriting with the model…',
+      enhanceTitle: 'Enhanced prompt: rewrite the draft with the current model and this conversation (spends tokens)',
+      undoTip: 'Restore the draft from before the enhancement (hidden once you edit the result)',
+      failed: 'Enhancement failed',
+      empty: 'Nothing to enhance',
+      save: 'Save',
+      saved: 'Saved',
+      close: 'Close',
+      loading: 'Loading settings…',
+      title: 'Enhanced prompt settings',
+      strategy: 'Rewrite mode',
+      style: 'Output style',
+      length: 'Output length',
+      language: 'Output language',
+      history: 'Include conversation context',
+      historyMessages: 'Context turns',
+      historyChars: 'Context character cap',
+      extra: 'Extra requirement (appended to the rewrite rules)',
+      provider: 'Model provider (empty = default)',
+      model: 'Model id (empty = default)',
+      timeout: 'Timeout ms',
+      strategyLlm: 'Model rewrite (tokens)',
+      strategyRule: 'Offline rule engine',
+      styleNatural: 'Prompt text',
+      styleStructured: 'Sectioned template',
+      lengthShort: 'Short',
+      lengthNormal: 'Normal',
+      lengthDetailed: 'Long',
+      auto: 'Auto',
+      zh: 'Chinese',
+      en: 'English',
+    }
+})()
+
+/** Select options: canonical value + localized label. */
+const OPTIONS = {
+  strategy: () => [
+    { value: 'llm', label: LABELS.strategyLlm },
+    { value: 'rule', label: LABELS.strategyRule },
+  ],
+  style: () => [
+    { value: 'natural', label: LABELS.styleNatural },
+    { value: 'structured', label: LABELS.styleStructured },
+  ],
+  length: () => [
+    { value: 'short', label: LABELS.lengthShort },
+    { value: 'normal', label: LABELS.lengthNormal },
+    { value: 'detailed', label: LABELS.lengthDetailed },
+  ],
+  language: () => [
+    { value: 'auto', label: LABELS.auto },
+    { value: 'zh', label: LABELS.zh },
+    { value: 'en', label: LABELS.en },
+  ],
+}
+
+/** Host control tokens; a renamed token degrades the look, never the rendering. */
+const TOKENS = {
+  label: 'var(--dsw-alias-label-secondary, currentColor)',
+  labelStrong: 'var(--dsw-alias-label-primary, currentColor)',
+  hover: 'var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.12))',
+  error: 'var(--dsw-alias-state-error-primary, #d64545)',
+  surface: 'var(--dsw-alias-bg-layer, #ffffff)',
+  border: 'var(--dsw-alias-border-l2, rgba(127,127,127,.28))',
+  radius: 'var(--dsw-radius-md, 10px)',
+}
+
+/** 28x28 pill, matching the composer's own icon controls. */
+const iconButtonStyle = (hovered, disabled) => ({
+  width: '28px',
+  height: '28px',
+  flex: 'none',
+  display: 'grid',
+  placeItems: 'center',
+  padding: '0',
+  border: 'none',
+  borderRadius: '999px',
+  background: hovered && !disabled ? TOKENS.hover : 'transparent',
+  color: hovered && !disabled ? TOKENS.labelStrong : TOKENS.label,
+  cursor: disabled ? 'default' : 'pointer',
+  opacity: disabled ? 0.6 : 1,
+  font: 'inherit',
+  transition: 'background-color .1s, color .1s, opacity .1s',
+})
+
+/** Sparkle glyph copied from the host icon set (16x16, currentColor stroke). */
+function SparkleIcon() {
+  return h('svg', {
+    width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
+    'aria-hidden': true, strokeWidth: 1.3,
+  },
+  h('path', { d: 'M5.875 3C5.875 6.33333 7.54167 8 10.875 8C7.54167 8 5.875 9.66667 5.875 13C5.875 9.66667 4.20833 8 0.875 8C4.20833 8 5.875 6.33333 5.875 3Z', stroke: 'currentColor' }),
+  h('path', { d: 'M12.375 1.55823C12.375 3.39156 13.2917 4.30823 15.125 4.30823C13.2917 4.30823 12.375 5.22489 12.375 7.05823C12.375 5.22489 11.4583 4.30823 9.625 4.30823C11.4583 4.30823 12.375 3.39156 12.375 1.55823Z', stroke: 'currentColor' }),
+  h('path', { d: 'M12.375 10.4418C12.375 11.7751 13.0417 12.4418 14.375 12.4418C13.0417 12.4418 12.375 13.1084 12.375 14.4418C12.375 13.1084 11.7083 12.4418 10.375 12.4418C11.7083 12.4418 12.375 11.7751 12.375 10.4418Z', stroke: 'currentColor' }),
+  )
+}
+
+/** Spinner ring shown while the model call is running. */
+function SpinnerIcon() {
+  return h('svg', {
+    width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
+    'aria-hidden': true, style: { animation: 'dsh-ep-spin .9s linear infinite' },
+  },
+  h('circle', { cx: 8, cy: 8, r: 6, stroke: 'currentColor', strokeOpacity: 0.25, strokeWidth: 1.6 }),
+  h('path', { d: 'M8 2a6 6 0 0 1 6 6', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' }),
+  )
+}
+
+/** Gear glyph for the settings entry. */
+function GearIcon() {
+  return h('svg', {
+    width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
+    'aria-hidden': true, stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round',
+  },
+  h('circle', { cx: 8, cy: 8, r: 2.1 }),
+  h('path', { d: 'M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1' }),
+  )
+}
+
+/** Undo arrow (our own artwork): a left-turning arrow. */
+function UndoIcon() {
+  return h('svg', {
+    width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
+    'aria-hidden': true, strokeWidth: 1.3,
+  },
+  h('path', { d: 'M6.2 3.4 2.9 6.4l3.3 3', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+  h('path', { d: 'M3.2 6.4h4.6a3.4 3.4 0 0 1 0 6.8H6.6', stroke: 'currentColor', strokeLinecap: 'round' }),
+  )
+}
+
+const STYLE_TAG = h('style', {
+  key: 'style',
+}, '@keyframes dsh-ep-spin{to{transform:rotate(360deg)}}')
+
+/** Replace the whole draft through the public input facade. */
+function writeDraft(inputActions, text) {
+  try {
+    if (!inputActions || typeof inputActions.setDraft !== 'function') return false
+    inputActions.setDraft(String(text))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** One JSON round-trip with the plugin's own endpoint. */
+async function callBridge(payload) {
+  const response = await fetch(ENDPOINT, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  let body = null
+  try {
+    body = await response.json()
+  } catch {
+    body = null
+  }
+  if (!response.ok || !body || body.ok !== true) {
+    const message = body && body.error && body.error.message ? body.error.message : `HTTP ${response.status}`
+    throw new Error(message)
+  }
+  return body
+}
+
+const rowStyle = {
+  display: 'grid',
+  gridTemplateColumns: '1fr auto',
+  alignItems: 'center',
+  gap: '8px',
+  padding: '5px 0',
+  fontSize: '12px',
+  color: TOKENS.label,
+}
+
+const inputStyle = {
+  width: '130px',
+  fontSize: '12px',
+  padding: '3px 6px',
+  borderRadius: '6px',
+  border: `1px solid ${TOKENS.border}`,
+  background: 'transparent',
+  color: TOKENS.labelStrong,
+  font: 'inherit',
+}
+
+const fieldFor = (key, type, options) => (value, onChange) => {
+  if (type === 'select') {
+    return h('select', {
+      key,
+      value: String(value ?? ''),
+      style: inputStyle,
+      onChange: (event) => onChange(event.target.value),
+    }, (options ?? []).map((option) => h('option', { key: option.value, value: option.value }, option.label)))
+  }
+  if (type === 'checkbox') {
+    return h('input', {
+      key,
+      type: 'checkbox',
+      checked: value === true,
+      onChange: (event) => onChange(event.target.checked),
+    })
+  }
+  if (type === 'number') {
+    return h('input', {
+      key,
+      type: 'number',
+      value: String(value ?? ''),
+      style: inputStyle,
+      onChange: (event) => onChange(event.target.value),
+    })
+  }
+  return h('input', {
+    key,
+    type: 'text',
+    value: String(value ?? ''),
+    style: inputStyle,
+    onChange: (event) => onChange(event.target.value),
+  })
+}
+
+const Field = ({ label, control }) => h('label', { style: rowStyle },
+  h('span', null, label),
+  control,
+)
+
+function SettingsPanel(props) {
+  const { draft, error, loading, saved, onDraft, onSave, onClose, anchor } = props
+  if (!anchor) return null
+  const set = (key) => (value) => {
+    if (key.startsWith('llm.')) {
+      const nested = key.slice(4)
+      onDraft({ ...draft, llm: { ...(draft.llm ?? {}), [nested]: value } })
+      return
+    }
+    onDraft({ ...draft, [key]: value })
+  }
+  const panelStyle = {
+    position: 'fixed',
+    left: `${Math.max(8, anchor.left - 220)}px`,
+    bottom: `${Math.max(8, anchor.bottom + 8)}px`,
+    width: '320px',
+    maxHeight: '60vh',
+    overflowY: 'auto',
+    zIndex: 60,
+    padding: '12px',
+    borderRadius: TOKENS.radius,
+    border: `1px solid ${TOKENS.border}`,
+    background: TOKENS.surface,
+    color: TOKENS.labelStrong,
+    boxShadow: '0 12px 32px rgba(0,0,0,.18)',
+    font: 'inherit',
+  }
+  const actions = {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    marginTop: '10px',
+  }
+  const button = {
+    fontSize: '12px',
+    padding: '4px 12px',
+    borderRadius: '999px',
+    border: `1px solid ${TOKENS.border}`,
+    background: 'transparent',
+    color: TOKENS.labelStrong,
+    cursor: 'pointer',
+    font: 'inherit',
+  }
+
+  return h('div', { style: panelStyle, role: 'dialog', 'aria-label': LABELS.settings, 'data-dsh-plugin': 'dsh-enhanced-prompt-settings' },
+    h('div', { style: { fontSize: '13px', fontWeight: 600, marginBottom: '6px' } }, `${LABELS.title} · v${VERSION}`),
+    loading ? h('div', { style: { fontSize: '12px', color: TOKENS.label } }, LABELS.loading) : null,
+    Field({ label: LABELS.strategy, control: fieldFor('strategy', 'select', OPTIONS.strategy())(draft.strategy, set('strategy')) }),
+    Field({ label: LABELS.style, control: fieldFor('style', 'select', OPTIONS.style())(draft.style, set('style')) }),
+    Field({ label: LABELS.length, control: fieldFor('length', 'select', OPTIONS.length())(draft.length, set('length')) }),
+    Field({ label: LABELS.language, control: fieldFor('language', 'select', OPTIONS.language())(draft.language, set('language')) }),
+    Field({ label: LABELS.history, control: fieldFor('includeHistory', 'checkbox')(draft.includeHistory, set('includeHistory')) }),
+    Field({ label: LABELS.historyMessages, control: fieldFor('historyMessages', 'number')(draft.historyMessages, set('historyMessages')) }),
+    Field({ label: LABELS.historyChars, control: fieldFor('historyChars', 'number')(draft.historyChars, set('historyChars')) }),
+    Field({ label: LABELS.provider, control: fieldFor('llm.provider', 'text')((draft.llm ?? {}).provider, set('llm.provider')) }),
+    Field({ label: LABELS.model, control: fieldFor('llm.model', 'text')((draft.llm ?? {}).model, set('llm.model')) }),
+    Field({ label: LABELS.timeout, control: fieldFor('llm.timeoutMs', 'number')((draft.llm ?? {}).timeoutMs, set('llm.timeoutMs')) }),
+    h('label', { style: { ...rowStyle, gridTemplateColumns: '1fr' } },
+      h('span', null, LABELS.extra),
+      h('textarea', {
+        value: String(draft.extraInstruction ?? ''),
+        rows: 2,
+        style: { ...inputStyle, width: '100%', resize: 'vertical' },
+        onChange: (event) => set('extraInstruction')(event.target.value),
+      }),
+    ),
+    error ? h('div', { style: { fontSize: '12px', color: TOKENS.error, marginTop: '6px' } }, error) : null,
+    saved ? h('div', { style: { fontSize: '12px', marginTop: '6px' } }, LABELS.saved) : null,
+    h('div', { style: actions },
+      h('button', { type: 'button', style: button, onClick: onClose }, LABELS.close),
+      h('button', { type: 'button', style: { ...button, fontWeight: 600 }, onClick: onSave }, LABELS.save),
+    ),
+  )
+}
+
+function EnhanceButton(props) {
+  const inputActions = props && props.inputActions
+  const useInput = props && props.useInput
+  const sessionId = props && props.sessionId
+
+  const draft = typeof useInput === 'function'
+    ? useInput((state) => (state && typeof state.draft === 'string' ? state.draft : ''))
+    : ''
+
+  const [previous, setPrevious] = React.useState(null)
+  const [applied, setApplied] = React.useState(null)
+  const [error, setError] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const [hover, setHover] = React.useState(0)
+  const [hint, setHint] = React.useState('')
+  const [panelOpen, setPanelOpen] = React.useState(false)
+  const [panelDraft, setPanelDraft] = React.useState({})
+  const [panelLoading, setPanelLoading] = React.useState(false)
+  const [panelError, setPanelError] = React.useState('')
+  const [panelSaved, setPanelSaved] = React.useState(false)
+  const [panelAnchor, setPanelAnchor] = React.useState(null)
+  const gearRef = React.useRef(null)
+
+  React.useEffect(() => {
+    setPrevious(null)
+    setApplied(null)
+    setError('')
+    setBusy(false)
+    setHint('')
+  }, [sessionId])
+
+  const text = String(draft || '')
+  const hasText = text.trim().length > 0
+  const canUndo = previous !== null && applied !== null && text === applied
+
+  const onClickEnhance = React.useCallback(() => {
+    if (busy) return
+    if (!hasText) {
+      setError(LABELS.empty)
+      return
+    }
+    const original = text
+    setBusy(true)
+    setError('')
+    callBridge({ op: 'enhance', text: original, sessionId, preset: 'auto', language: 'auto' }).then((body) => {
+      if (!writeDraft(inputActions, body.enhanced)) {
+        setBusy(false)
+        setError(LABELS.failed)
+        return
+      }
+      setPrevious(original)
+      setApplied(body.enhanced)
+      setBusy(false)
+      const meta = body.meta || {}
+      setHint(meta.provider && meta.model ? `${meta.provider}/${meta.model} · ${meta.elapsedMs ?? 0}ms` : '')
+    }, (failure) => {
+      setBusy(false)
+      setError(String((failure && failure.message) || failure))
+    })
+  }, [text, hasText, inputActions, busy, sessionId])
+
+  const onClickUndo = React.useCallback(() => {
+    if (previous === null || busy) return
+    if (writeDraft(inputActions, previous)) {
+      setPrevious(null)
+      setApplied(null)
+      setError('')
+      setHint('')
+    }
+  }, [previous, inputActions, busy])
+
+  const openPanel = React.useCallback(() => {
+    const gear = gearRef.current
+    const rect = gear && typeof gear.getBoundingClientRect === 'function' ? gear.getBoundingClientRect() : null
+    const viewportHeight = typeof window !== 'undefined' && Number.isFinite(window.innerHeight) ? window.innerHeight : 800
+    setPanelAnchor(rect
+      ? { left: rect.left, bottom: viewportHeight - rect.top }
+      : { left: 120, bottom: 120 })
+    setPanelOpen(true)
+    setPanelSaved(false)
+    setPanelError('')
+    setPanelLoading(true)
+    callBridge({ op: 'settings' }).then((body) => {
+      setPanelDraft(body.settings ?? {})
+      setPanelLoading(false)
+    }, (failure) => {
+      setPanelLoading(false)
+      setPanelError(String((failure && failure.message) || failure))
+    })
+  }, [])
+
+  const savePanel = React.useCallback(() => {
+    setPanelError('')
+    callBridge({ op: 'saveSettings', settings: panelDraft }).then((body) => {
+      setPanelDraft(body.settings ?? panelDraft)
+      setPanelSaved(true)
+    }, (failure) => {
+      setPanelError(String((failure && failure.message) || failure))
+    })
+  }, [panelDraft])
+
+  React.useEffect(() => {
+    if (!panelOpen) return undefined
+    const onKey = (event) => { if (event && event.key === 'Escape') setPanelOpen(false) }
+    try {
+      document.addEventListener('keydown', onKey)
+    } catch { /* no document in tests */ }
+    return () => {
+      try {
+        document.removeEventListener('keydown', onKey)
+      } catch { /* ignore */ }
+    }
+  }, [panelOpen])
+
+  if (!hasText && !canUndo && !error && !busy && !panelOpen) return null
+
+  const title = busy
+    ? LABELS.busy
+    : LABELS.enhanceTitle + (hint ? ` · 上次 ${hint}` : '') + ` · v${VERSION}`
+
+  const children = [
+    STYLE_TAG,
+    h('button', {
+      key: 'enhance',
+      type: 'button',
+      style: iconButtonStyle(hover === 1, busy),
+      title,
+      'aria-label': LABELS.enhance,
+      'aria-busy': busy ? 'true' : 'false',
+      disabled: busy,
+      onMouseEnter: () => setHover(1),
+      onMouseLeave: () => setHover(0),
+      onMouseDown: (event) => event.preventDefault(),
+      onClick: onClickEnhance,
+    }, busy ? SpinnerIcon() : SparkleIcon()),
+    h('button', {
+      key: 'settings',
+      type: 'button',
+      ref: gearRef,
+      style: iconButtonStyle(hover === 3, false),
+      title: LABELS.settings,
+      'aria-label': LABELS.settings,
+      'aria-expanded': panelOpen ? 'true' : 'false',
+      onMouseEnter: () => setHover(3),
+      onMouseLeave: () => setHover(0),
+      onMouseDown: (event) => event.preventDefault(),
+      onClick: openPanel,
+    }, GearIcon()),
+  ]
+
+  if (canUndo && !busy) {
+    children.push(h('button', {
+      key: 'undo',
+      type: 'button',
+      style: iconButtonStyle(hover === 2, false),
+      title: LABELS.undoTip,
+      'aria-label': LABELS.undo,
+      onMouseEnter: () => setHover(2),
+      onMouseLeave: () => setHover(0),
+      onMouseDown: (event) => event.preventDefault(),
+      onClick: onClickUndo,
+    }, UndoIcon()))
+  }
+
+  if (error) {
+    children.push(h('span', {
+      key: 'error',
+      title: error,
+      role: 'status',
+      style: { fontSize: '12px', lineHeight: '1', color: TOKENS.error, whiteSpace: 'nowrap' },
+    }, LABELS.failed))
+  }
+
+  if (panelOpen) {
+    children.push(SettingsPanel({
+      key: 'panel',
+      draft: panelDraft,
+      error: panelError,
+      loading: panelLoading,
+      saved: panelSaved,
+      anchor: panelAnchor,
+      onDraft: setPanelDraft,
+      onSave: savePanel,
+      onClose: () => setPanelOpen(false),
+    }))
+  }
+
+  return h('span', {
+    style: { display: 'inline-flex', alignItems: 'center', gap: '2px', flex: 'none' },
+    'data-dsh-plugin': 'dsh-enhanced-prompt',
+  }, children)
+}
+
+/** Memoised: the composer re-renders on every keystroke; this entry must not. */
+const EnhanceButtonMemo = React.memo(EnhanceButton)
+
+function apply(ctx) {
+  ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+    name: 'conversation.input.right',
+    id: 'enhanced-prompt',
+    order: 5,
+  }, EnhanceButtonMemo))
+}
+
+return {
+  inject: ['slots'],
+  apply,
+  __version: VERSION,
+  __endpoint: ENDPOINT,
+}

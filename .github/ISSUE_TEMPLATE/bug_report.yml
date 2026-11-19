@@ -1,0 +1,74 @@
+name: Bug report
+description: Something is broken in the plugin
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not paste secrets, API keys or private prompts.
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: Output of `/enhance status` (or the version in the Host log line).
+      placeholder: v1.4.0
+    validations:
+      required: true
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DeepSeek Harness version
+      placeholder: 0.2.1-rc.4 / DSH NEXT Desktop 2.0.21-next
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where does it happen?
+      options:
+        - Composer ✦ button
+        - ⚙ settings panel
+        - /enhance command
+        - enhance_prompt tool
+        - Install / uninstall
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Type "帮我写个周报" in the composer
+        2. Click ✦
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include the error text and any `[enhanced-prompt]` Host log lines.
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: v22.11.0
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues
+          required: true
+        - label: I removed secrets and private content from this report
+          required: true

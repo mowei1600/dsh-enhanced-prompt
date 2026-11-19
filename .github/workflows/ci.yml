@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Text hygiene (BOM / CRLF / replacement characters)
+        run: node scripts/check-text.mjs
+
+      - name: Generated client bundle is up to date
+        run: node scripts/build-client.mjs --check
+
+      - name: Unit tests
+        run: node --test
+
+      - name: Installer is syntactically valid
+        run: node --check bin/install.mjs && node --check index.js && node --check lib/llm.js

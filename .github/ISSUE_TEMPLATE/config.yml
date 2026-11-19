@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/mowei1600/dsh-enhanced-prompt/security/advisories/new
+    about: Please report vulnerabilities privately, not in a public issue.
+  - name: Installation help
+    url: https://github.com/mowei1600/dsh-enhanced-prompt#install
+    about: Check the install section first — it covers GitHub, one-line and local installs.

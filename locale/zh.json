@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "title": "增强提示词",
+    "description": "把一句话的模糊需求展开成结构化、可直接发送的提示词：/enhance 命令、enhance_prompt 工具，以及可选的代理引导。"
+  },
+  "command": {
+    "enhance": "把粗略需求展开成结构化提示词（预览或直接发送）。"
+  }
+}

@@ -1,0 +1,65 @@
+# dsh-enhanced-prompt bundle patch
+#
+# Inserts one Host plugin row into the profile. The row owns:
+#   - the /enhance slash command (preview + apply)
+#   - the enhance_prompt tool
+#   - an optional system-prompt guidance section
+#   - POST /enhance/api, the same-origin bridge the composer button calls
+#
+# Rewriting is one model call through the Host's ctx.llm: clicking the composer
+# button spends tokens. `llm.provider` / `llm.model` may stay empty — the plugin
+# then follows the profile's default model selection (agentDefaultModel). Set
+# them when you want this feature pinned to a specific model.
+#
+# Defaults below are also the fallback values inside index.js (normalizeConfig).
+# Override this row from the profile's cordis.patch.yml by id, e.g.
+#   - id: enhanced-prompt
+#     config: { preset: code, language: zh, llm: { provider: magpie, model: ollama/deepseek-v4.1-flash } }
+# A patch replaces the whole `config` object, so restate every field you keep.
+
+- insert:
+    - id: enhanced-prompt
+      name: 'dsh-enhanced-prompt'
+      config:
+        enabled: true
+        strategy: llm              # llm = 真模型改写（花 token）；rule = 离线规则引擎
+        style: natural             # natural = 直接给提示词正文；structured = 分节模板
+        length: normal             # short | normal | detailed
+        preset: auto
+        language: auto
+        tone: standard
+        maxInputBytes: 8000
+        maxInputCharacters: 8000
+        maxOutputBytes: 16000
+        includeOriginal: true
+        allowApply: true
+        extraInstruction: ''       # 追加到改写规则的自定义要求
+        command:
+          enabled: true
+          name: enhance
+        tool:
+          enabled: true
+          name: enhance_prompt
+        guidance:
+          enabled: true
+          order: 5150
+          threshold: 45
+        context:
+          includeCwd: true
+          includeWorkspace: true
+          includeDate: true
+        history:                    # 用当前会话的最近几轮做上下文
+          enabled: true
+          messages: 6
+          chars: 2000
+        llm:
+          provider: ''             # 空 = 跟随 profile 的默认模型
+          model: ''
+          maxOutputTokens: 1400
+          temperature: 0.2
+          timeoutMs: 45000
+          fallbackToRule: false
+        bridge:
+          enabled: true
+          maxInFlight: 2
+        diagnostics: true

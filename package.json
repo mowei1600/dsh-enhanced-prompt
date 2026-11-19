@@ -1,0 +1,72 @@
+{
+  "name": "dsh-enhanced-prompt",
+  "version": "1.4.0",
+  "description": "Prompt enhancement for DeepSeek Harness: one click rewrites your draft into a ready-to-send prompt with the current model and this conversation's context. Composer button, /enhance command, enhance_prompt tool and an in-plugin settings panel.",
+  "license": "MIT",
+  "author": "dsh-enhanced-prompt contributors",
+  "type": "module",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mowei1600/dsh-enhanced-prompt.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mowei1600/dsh-enhanced-prompt/issues"
+  },
+  "homepage": "https://github.com/mowei1600/dsh-enhanced-prompt#readme",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "bin",
+    "client.js",
+    "client",
+    "scripts",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "docs"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "build:client": "node scripts/build-client.mjs",
+    "check:client": "node scripts/build-client.mjs --check",
+    "check:text": "node scripts/check-text.mjs",
+    "check": "npm run check:client && npm run check:text && npm test",
+    "install:dsh": "node bin/install.mjs install --profile desktop"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-bundle",
+    "dsh-client-plugin",
+    "deepseek-harness",
+    "deepseek",
+    "enhanced-prompt",
+    "prompt-engineering",
+    "llm"
+  ]
+}

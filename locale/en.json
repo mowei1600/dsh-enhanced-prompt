@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "title": "Enhanced Prompt",
+    "description": "Turns a vague request into a structured, ready-to-send prompt: /enhance command, enhance_prompt tool, and optional agent guidance."
+  },
+  "command": {
+    "enhance": "Expand a rough request into a structured prompt (preview or apply)."
+  }
+}
