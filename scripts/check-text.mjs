@@ -41,6 +41,12 @@ const walk = (dir) => {
     const text = bytes.toString('utf8')
     if (text.includes('\uFFFD')) problems.push(`${relative}: replacement character (not valid UTF-8)`)
     if (!CRLF_ALLOWED.has(ext) && text.includes('\r\n')) problems.push(`${relative}: CRLF line endings`)
+    // Windows PowerShell 5.1 reads BOM-less scripts as ANSI, so a non-ASCII
+    // literal in a .ps1 file turns into mojibake when the file is executed.
+    // Keep repository scripts ASCII-only (use JSON \u escapes for symbols).
+    if (ext === '.ps1' && bytes.some((byte) => byte > 0x7F)) {
+      problems.push(`${relative}: non-ASCII byte in a PowerShell script (PS 5.1 misreads BOM-less UTF-8; use \\u escapes)`)
+    }
   }
 }
 
