@@ -97,6 +97,7 @@ For Option A, use the plugin manager's update/remove actions instead.
 |---|---|
 | Composer row | ✦ rewrites the draft in place (model call, spends tokens); ↩ restores the pre-rewrite text |
 | ⚙ panel | rewrite mode, style, length, language, conversation context (turns / character cap), model, timeout, extra requirement |
+| **Plugins page** | the plugin's detail page (Settings → Plugins) carries the same settings as a full card with **Reset to defaults** |
 | `/enhance <request>` | preview the rewrite in chat (`apply` sends it as the next message, `preset`/`lang` switch the offline engine's template, `status`/`settings`/`set` inspect or change settings) |
 | `enhance_prompt` tool | lets an agent restate a vague request before working on it |
 
@@ -106,7 +107,8 @@ placeholders, no quoted original — just the text you would have typed if you h
 ## Configuration
 
 Runtime settings live in `$DSH_HOME/enhanced-prompt.settings.json` and are editable from the ⚙
-panel or `/enhance set key=value`. Deployment defaults come from the bundle patch and can be
+panel, the plugin's own card on the **Plugins** page, or `/enhance set key=value` (Reset to defaults
+deletes the file). Deployment defaults come from the bundle patch and can be
 overridden in the profile's `cordis.patch.yml`:
 
 ```yaml

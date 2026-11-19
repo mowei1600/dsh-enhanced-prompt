@@ -50,11 +50,37 @@ function hookedReact() {
   let props = null
   let tree = null
 
+  const effectDeps = []
+  let pendingEffects = []
+  let flushing = false
+
+  const flushEffects = () => {
+    if (flushing) return
+    flushing = true
+    try {
+      for (const effect of pendingEffects) {
+        const previous = effectDeps[effect.index]
+        const deps = effect.deps
+        const unchanged = previous !== undefined && deps !== undefined
+          && previous.length === deps.length
+          && deps.every((value, index) => Object.is(value, previous[index]))
+        if (unchanged) continue
+        effectDeps[effect.index] = deps
+        effect.fn()
+      }
+    } finally {
+      pendingEffects = []
+      flushing = false
+    }
+  }
+
   const render = (nextProps) => {
     if (nextProps !== undefined) props = nextProps
     cursor = 0
+    pendingEffects = []
     tree = component(props)
     mounted = true
+    flushEffects()
     return tree
   }
 
@@ -79,7 +105,10 @@ function hookedReact() {
       if (!mounted || !(index in slots)) slots[index] = { current: initial }
       return slots[index]
     },
-    useEffect: () => { cursor += 1 },
+    useEffect: (fn, deps) => {
+      const index = cursor++
+      pendingEffects.push({ index, fn, deps })
+    },
     useCallback: (fn) => { cursor += 1; return fn },
     memo: (component) => component,
   }
@@ -141,7 +170,7 @@ test('committed client.js is fresh (regenerate check)', () => {
   assert.match(out, /up to date/)
 })
 
-test('bundle registers one control-row entry next to the model seat', () => {
+test('bundle registers the composer controls and the Plugins-page settings card', () => {
   const api = loadBundle(staticReact(), async () => jsonResponse(200, { ok: true }))
   assert.deepEqual(api.inject, ['slots'])
   assert.equal(api.__endpoint, '/enhance/api')
@@ -149,18 +178,28 @@ test('bundle registers one control-row entry next to the model seat', () => {
   assert.match(String(api.__version), /^\d+\.\d+\.\d+$/)
 
   const registrations = []
+  const owners = []
   api.apply({
     slots: {
       inject: (owner, callback) => {
-        assert.equal(owner, 'conversation.input.right', 'renders immediately before the model seat')
+        owners.push(owner)
         callback()
       },
       register: (options, component) => registrations.push({ options, component }),
     },
   })
-  assert.equal(registrations.length, 1)
-  assert.equal(registrations[0].options.id, 'enhanced-prompt')
-  assert.equal(typeof registrations[0].component, 'function')
+  assert.deepEqual(owners, ['conversation.input.right', 'plugins.bundle.config'])
+  assert.equal(registrations.length, 2)
+
+  const row = registrations.find((entry) => entry.options.name === 'conversation.input.right')
+  assert.equal(row.options.id, 'enhanced-prompt')
+  assert.equal(row.options.order, 5)
+  assert.equal(typeof row.component, 'function')
+
+  const card = registrations.find((entry) => entry.options.name === 'plugins.bundle.config')
+  assert.equal(card.options.key, 'dsh-enhanced-prompt', 'keyed by the package name the page looks up')
+  assert.equal(card.options.id, 'enhanced-prompt-settings')
+  assert.equal(typeof card.component, 'function')
 })
 
 test('component is hidden while the draft is empty and renders a 28px icon button otherwise', () => {
@@ -400,4 +439,55 @@ test('settings panel loads over the bridge and saves through it', async () => {
   const savedCall = calls.findIndex((call) => JSON.parse(call.init.body).op === 'saveSettings')
   assert.ok(savedCall >= 0, 'save goes through the bridge')
   assert.equal(JSON.parse(calls[savedCall].init.body).settings.strategy, 'llm')
+})
+
+test('Plugins-page card loads, saves and resets the same settings', async () => {
+  const calls = []
+  const defaults = {
+    strategy: 'llm',
+    style: 'natural',
+    length: 'normal',
+    language: 'auto',
+    includeHistory: true,
+    historyMessages: 6,
+    historyChars: 2000,
+    extraInstruction: '',
+    llm: { provider: '', model: '', timeoutMs: 45000 },
+  }
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body)
+    calls.push(body)
+    if (body.op === 'settings') return jsonResponse(200, { ok: true, settings: defaults, overrides: {} })
+    if (body.op === 'saveSettings') return jsonResponse(200, { ok: true, settings: { ...defaults, ...body.settings } })
+    if (body.op === 'resetSettings') return jsonResponse(200, { ok: true, settings: defaults, overrides: {} })
+    return jsonResponse(404, { ok: false, error: { message: 'unexpected op' } })
+  }
+
+  const harness = hookedReact()
+  const api = loadBundle(harness.React, fetchImpl)
+  const registrations = []
+  api.apply({ slots: { inject: (_owner, callback) => callback(), register: (o, c) => registrations.push({ options: o, component: c }) } })
+  const Card = registrations.find((entry) => entry.options.name === 'plugins.bundle.config').component
+
+  let tree = harness.render(Card, {})
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  tree = harness.rerender({})
+
+  const dialog = collect(tree).find((node) => node.props && node.props['data-dsh-plugin'] === 'dsh-enhanced-prompt-config')
+  assert.ok(dialog, 'card renders on the plugin page')
+  assert.ok(collect(dialog).filter((node) => node.type === 'select').length >= 4, 'all selects render')
+  assert.ok(collect(dialog).filter((node) => node.type === 'textarea').length === 1, 'extra requirement textarea renders')
+
+  const buttons = collect(dialog).filter((node) => node.type === 'button')
+  const save = buttons.find((node) => String(node.children.join('')).includes('保存'))
+  const reset = buttons.find((node) => String(node.children.join('')).includes('恢复默认'))
+  assert.ok(save && reset, 'save and reset buttons exist')
+
+  save.props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.ok(calls.some((call) => call.op === 'saveSettings'), 'save posts saveSettings')
+
+  reset.props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.ok(calls.some((call) => call.op === 'resetSettings'), 'reset posts resetSettings')
 })

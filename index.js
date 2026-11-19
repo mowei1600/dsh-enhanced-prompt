@@ -29,10 +29,10 @@ import * as engine from './lib/engine.js'
 import { rewriteWithModel, resolveRoute, LLM_ERRORS } from './lib/llm.js'
 import { createBridgeHandler, registerBridge, BRIDGE_PATH } from './lib/bridge.js'
 import { recentTurns, renderHistory } from './lib/history.js'
-import { readSettings, writeSettings, mergeSettings, normalizeSettings, settingsPath } from './lib/settings.js'
+import { readSettings, writeSettings, deleteSettings, mergeSettings, normalizeSettings, settingsPath } from './lib/settings.js'
 
 /** Plugin version, kept in sync with package.json. */
-export const VERSION = '1.4.1'
+export const VERSION = '1.4.2'
 
 /** Cordis plugin name (also the loader row id by default). */
 export const name = 'enhanced-prompt'
@@ -898,6 +898,13 @@ export function apply(ctx, config) {
     effectiveCfg = normalizeConfigResult(mergeSettings(rawRowConfig, savedSettings)).config
     return savedSettings
   }
+  /** Drop every override and fall back to the profile patch values. */
+  const resetSettings = () => {
+    deleteSettings()
+    savedSettings = {}
+    effectiveCfg = normalizeConfigResult(mergeSettings(rawRowConfig, savedSettings)).config
+    return savedSettings
+  }
 
   const log = (message) => {
     if (cfg.diagnostics) console.log(`[enhanced-prompt] ${message}`)
@@ -1033,6 +1040,7 @@ export function apply(ctx, config) {
           /** Panel view: effective values (defaults included), not just overrides. */
           describeSettings: () => describeSettings(getConfig()),
           saveSettings,
+          resetSettings,
           enhance: async (request) => {
             const liveCfg = getConfig()
             const context = collectContext(liveCfg, runtime, undefined)

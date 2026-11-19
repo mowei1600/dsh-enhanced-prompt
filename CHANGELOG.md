@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format loosely foll
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.2] — 2026-11-20
+
+### Added
+
+- Settings card on the DSH **Plugins** page (`plugins.bundle.config`, keyed by the package name), so
+  the plugin's options are editable from its own plugin detail page — not only from the composer
+  popover. The card supports the same fields plus **Reset to defaults**.
+- `resetSettings` bridge operation: deletes the local settings file and falls back to the profile
+  configuration.
+
+### Changed
+
+- The settings form is shared between the composer popover and the plugin page card, so both render
+  the same fields, labels and defaults.
+
 ## [1.4.1] — 2026-11-20
 
 ### Added

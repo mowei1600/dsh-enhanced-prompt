@@ -46,6 +46,8 @@ const LABELS = (() => {
       saved: '已保存',
       close: '关闭',
       loading: '读取设置…',
+      reset: '恢复默认',
+      configHint: '改动保存后立即生效（下一次改写使用新设置）。「恢复默认」会删除本地设置文件，回到 profile 的配置。',
       title: '增强提示词设置',
       strategy: '改写方式',
       style: '输出风格',
@@ -82,6 +84,8 @@ const LABELS = (() => {
       saved: 'Saved',
       close: 'Close',
       loading: 'Loading settings…',
+      reset: 'Reset to defaults',
+      configHint: 'Changes apply to the next rewrite. Reset removes the local settings file and falls back to the profile config.',
       title: 'Enhanced prompt settings',
       strategy: 'Rewrite mode',
       style: 'Output style',
@@ -300,17 +304,82 @@ const Field = ({ label, control }) => h('label', { style: rowStyle },
   control,
 )
 
+/** One entry per editable setting, shared by the popover and the plugin page. */
+const FIELDS = [
+  { key: 'strategy', type: 'select', label: () => LABELS.strategy, options: () => OPTIONS.strategy() },
+  { key: 'style', type: 'select', label: () => LABELS.style, options: () => OPTIONS.style() },
+  { key: 'length', type: 'select', label: () => LABELS.length, options: () => OPTIONS.length() },
+  { key: 'language', type: 'select', label: () => LABELS.language, options: () => OPTIONS.language() },
+  { key: 'includeHistory', type: 'checkbox', label: () => LABELS.history },
+  { key: 'historyMessages', type: 'number', label: () => LABELS.historyMessages },
+  { key: 'historyChars', type: 'number', label: () => LABELS.historyChars },
+  { key: 'llm.provider', type: 'text', label: () => LABELS.provider },
+  { key: 'llm.model', type: 'text', label: () => LABELS.model },
+  { key: 'llm.timeoutMs', type: 'number', label: () => LABELS.timeout },
+  { key: 'extraInstruction', type: 'textarea', label: () => LABELS.extra },
+]
+
+/** Read a possibly nested value (`llm.provider`). */
+const readField = (draft, key) => {
+  if (key.startsWith('llm.')) return (draft.llm ?? {})[key.slice(4)]
+  return draft[key]
+}
+
+/** Write a possibly nested value and hand back the next draft. */
+const writeField = (draft, key, value) => {
+  if (key.startsWith('llm.')) {
+    return { ...draft, llm: { ...(draft.llm ?? {}), [key.slice(4)]: value } }
+  }
+  return { ...draft, [key]: value }
+}
+
+/** Render the shared form rows; `full` widens inputs for the plugin page. */
+function settingsFields(draft, onDraft, full = false) {
+  const nodes = []
+  for (const field of FIELDS) {
+    const onChange = (value) => onDraft(writeField(draft, field.key, value))
+    if (field.type === 'textarea') {
+      nodes.push(h('label', { key: field.key, style: { ...rowStyle, gridTemplateColumns: '1fr' } },
+        h('span', null, field.label()),
+        h('textarea', {
+          value: String(readField(draft, field.key) ?? ''),
+          rows: full ? 3 : 2,
+          style: { ...inputStyle, width: '100%', resize: 'vertical' },
+          onChange: (event) => onChange(event.target.value),
+        }),
+      ))
+      continue
+    }
+    const control = fieldFor(field.key, field.type, field.options ? field.options() : undefined)(
+      readField(draft, field.key),
+      onChange,
+    )
+    nodes.push(Field({ label: field.label(), control }))
+  }
+  return nodes
+}
+
+const actionsStyle = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: '8px',
+  marginTop: '10px',
+}
+
+const smallButtonStyle = {
+  fontSize: '12px',
+  padding: '4px 12px',
+  borderRadius: '999px',
+  border: `1px solid ${TOKENS.border}`,
+  background: 'transparent',
+  color: TOKENS.labelStrong,
+  cursor: 'pointer',
+  font: 'inherit',
+}
+
 function SettingsPanel(props) {
   const { draft, error, loading, saved, onDraft, onSave, onClose, anchor } = props
   if (!anchor) return null
-  const set = (key) => (value) => {
-    if (key.startsWith('llm.')) {
-      const nested = key.slice(4)
-      onDraft({ ...draft, llm: { ...(draft.llm ?? {}), [nested]: value } })
-      return
-    }
-    onDraft({ ...draft, [key]: value })
-  }
   const panelStyle = {
     position: 'fixed',
     left: `${Math.max(8, anchor.left - 220)}px`,
@@ -327,53 +396,101 @@ function SettingsPanel(props) {
     boxShadow: '0 12px 32px rgba(0,0,0,.18)',
     font: 'inherit',
   }
-  const actions = {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '8px',
-    marginTop: '10px',
-  }
-  const button = {
-    fontSize: '12px',
-    padding: '4px 12px',
-    borderRadius: '999px',
-    border: `1px solid ${TOKENS.border}`,
-    background: 'transparent',
-    color: TOKENS.labelStrong,
-    cursor: 'pointer',
-    font: 'inherit',
-  }
+  const button = smallButtonStyle
 
   return h('div', { style: panelStyle, role: 'dialog', 'aria-label': LABELS.settings, 'data-dsh-plugin': 'dsh-enhanced-prompt-settings' },
     h('div', { style: { fontSize: '13px', fontWeight: 600, marginBottom: '6px' } }, `${LABELS.title} · v${VERSION}`),
     loading ? h('div', { style: { fontSize: '12px', color: TOKENS.label } }, LABELS.loading) : null,
-    Field({ label: LABELS.strategy, control: fieldFor('strategy', 'select', OPTIONS.strategy())(draft.strategy, set('strategy')) }),
-    Field({ label: LABELS.style, control: fieldFor('style', 'select', OPTIONS.style())(draft.style, set('style')) }),
-    Field({ label: LABELS.length, control: fieldFor('length', 'select', OPTIONS.length())(draft.length, set('length')) }),
-    Field({ label: LABELS.language, control: fieldFor('language', 'select', OPTIONS.language())(draft.language, set('language')) }),
-    Field({ label: LABELS.history, control: fieldFor('includeHistory', 'checkbox')(draft.includeHistory, set('includeHistory')) }),
-    Field({ label: LABELS.historyMessages, control: fieldFor('historyMessages', 'number')(draft.historyMessages, set('historyMessages')) }),
-    Field({ label: LABELS.historyChars, control: fieldFor('historyChars', 'number')(draft.historyChars, set('historyChars')) }),
-    Field({ label: LABELS.provider, control: fieldFor('llm.provider', 'text')((draft.llm ?? {}).provider, set('llm.provider')) }),
-    Field({ label: LABELS.model, control: fieldFor('llm.model', 'text')((draft.llm ?? {}).model, set('llm.model')) }),
-    Field({ label: LABELS.timeout, control: fieldFor('llm.timeoutMs', 'number')((draft.llm ?? {}).timeoutMs, set('llm.timeoutMs')) }),
-    h('label', { style: { ...rowStyle, gridTemplateColumns: '1fr' } },
-      h('span', null, LABELS.extra),
-      h('textarea', {
-        value: String(draft.extraInstruction ?? ''),
-        rows: 2,
-        style: { ...inputStyle, width: '100%', resize: 'vertical' },
-        onChange: (event) => set('extraInstruction')(event.target.value),
-      }),
-    ),
+    settingsFields(draft, onDraft),
     error ? h('div', { style: { fontSize: '12px', color: TOKENS.error, marginTop: '6px' } }, error) : null,
     saved ? h('div', { style: { fontSize: '12px', marginTop: '6px' } }, LABELS.saved) : null,
-    h('div', { style: actions },
+    h('div', { style: actionsStyle },
       h('button', { type: 'button', style: button, onClick: onClose }, LABELS.close),
       h('button', { type: 'button', style: { ...button, fontWeight: 600 }, onClick: onSave }, LABELS.save),
     ),
   )
 }
+
+/**
+ * Settings card on the DSH Plugins page (`plugins.bundle.config`, keyed by the
+ * package name). Self-contained: it reads and writes the plugin's own settings
+ * file through the same-origin bridge, so it works without the Host settings
+ * form service and needs no schema declaration.
+ */
+function PluginSettingsCard() {
+  const [draft, setDraft] = React.useState({})
+  const [loading, setLoading] = React.useState(true)
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState('')
+  const [saved, setSaved] = React.useState(false)
+
+  React.useEffect(() => {
+    let alive = true
+    callBridge({ op: 'settings' }).then((body) => {
+      if (!alive) return
+      setDraft(body.settings ?? {})
+      setLoading(false)
+    }, (failure) => {
+      if (!alive) return
+      setLoading(false)
+      setError(String((failure && failure.message) || failure))
+    })
+    return () => { alive = false }
+  }, [])
+
+  const save = () => {
+    setBusy(true)
+    setError('')
+    callBridge({ op: 'saveSettings', settings: draft }).then((body) => {
+      setDraft(body.settings ?? draft)
+      setBusy(false)
+      setSaved(true)
+    }, (failure) => {
+      setBusy(false)
+      setError(String((failure && failure.message) || failure))
+    })
+  }
+
+  const reset = () => {
+    setBusy(true)
+    setError('')
+    callBridge({ op: 'resetSettings' }).then((body) => {
+      setDraft(body.settings ?? {})
+      setBusy(false)
+      setSaved(true)
+    }, (failure) => {
+      setBusy(false)
+      setError(String((failure && failure.message) || failure))
+    })
+  }
+
+  const cardStyle = {
+    border: `1px solid ${TOKENS.border}`,
+    borderRadius: TOKENS.radius,
+    padding: '14px 16px',
+    background: TOKENS.surface,
+    color: TOKENS.labelStrong,
+    font: 'inherit',
+    maxWidth: '720px',
+  }
+  const gridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', columnGap: '24px' }
+
+  return h('div', { style: cardStyle, 'data-dsh-plugin': 'dsh-enhanced-prompt-config' },
+    h('div', { style: { fontSize: '13px', fontWeight: 600 } }, `${LABELS.title} · v${VERSION}`),
+    h('div', { style: { fontSize: '12px', color: TOKENS.label, margin: '4px 0 10px' } }, LABELS.configHint),
+    loading
+      ? h('div', { style: { fontSize: '12px', color: TOKENS.label } }, LABELS.loading)
+      : h('div', { style: gridStyle }, settingsFields(draft, setDraft, true)),
+    error ? h('div', { style: { fontSize: '12px', color: TOKENS.error, marginTop: '8px' } }, error) : null,
+    saved ? h('div', { style: { fontSize: '12px', marginTop: '8px' } }, LABELS.saved) : null,
+    h('div', { style: actionsStyle },
+      h('button', { type: 'button', style: smallButtonStyle, disabled: busy, onClick: reset }, LABELS.reset),
+      h('button', { type: 'button', style: { ...smallButtonStyle, fontWeight: 600 }, disabled: busy, onClick: save }, LABELS.save),
+    ),
+  )
+}
+
+const PluginSettingsCardMemo = React.memo(PluginSettingsCard)
 
 function EnhanceButton(props) {
   const inputActions = props && props.inputActions
@@ -572,11 +689,20 @@ function EnhanceButton(props) {
 const EnhanceButtonMemo = React.memo(EnhanceButton)
 
 function apply(ctx) {
+  // Composer control row: enhance + settings popover.
   ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
     name: 'conversation.input.right',
     id: 'enhanced-prompt',
     order: 5,
   }, EnhanceButtonMemo))
+
+  // DSH Plugins page, bundle detail: the same settings as a full card, keyed by
+  // the package name the page looks up (`plugins.bundle.config`).
+  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+    name: 'plugins.bundle.config',
+    key: 'dsh-enhanced-prompt',
+    id: 'enhanced-prompt-settings',
+  }, PluginSettingsCardMemo))
 }
 
 return {

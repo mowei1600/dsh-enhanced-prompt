@@ -345,6 +345,22 @@ test('settings ops expose effective defaults and normalize saved values', async 
   assert.equal(save.status, 200)
   assert.equal(JSON.parse(save.body).overrides.length, 'short')
   assert.equal(JSON.parse(save.body).settings.length, 'normal', 'effective view still reports the merged config')
+
+  let resetCalled = false
+  const resetHandler = createBridgeHandler({
+    version: '1.4.2',
+    strategy: 'llm',
+    describeRoute: () => undefined,
+    enhance: enhanceOk,
+    getSettings: () => ({}),
+    describeSettings: () => ({ includeHistory: true, historyMessages: 6 }),
+    saveSettings: () => ({}),
+    resetSettings: () => { resetCalled = true },
+  })
+  const reset = await callBridge(resetHandler, { headers, body: '{"op":"resetSettings"}' })
+  assert.equal(reset.status, 200)
+  assert.equal(resetCalled, true, 'reset handler invoked')
+  assert.deepEqual(JSON.parse(reset.body).overrides, {})
 })
 
 test('bridge maps rewrite failures to statuses and blocks a second in-flight call', async () => {

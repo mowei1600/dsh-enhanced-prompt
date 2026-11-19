@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhanced-prompt",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Prompt enhancement for DeepSeek Harness: one click rewrites your draft into a ready-to-send prompt with the current model and this conversation's context. Composer button, /enhance command, enhance_prompt tool and an in-plugin settings panel.",
   "license": "MIT",
   "author": "dsh-enhanced-prompt contributors",
