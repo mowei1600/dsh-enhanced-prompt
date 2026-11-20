@@ -449,6 +449,39 @@ Error: ... failed to parse overlay ...: YAMLException: duplicated mapping key (2
 
 ---
 
+## 7.12 v1.4.2：插件详情页里的设置卡片
+
+需求：用户希望「在 DSH 的插件设置里」直接改配置，而不只是输入框旁的 ⚙ 弹层。
+
+实现（依据插件管理页源码实证）：
+
+- 插件详情页（Settings → Plugins → 某个 bundle）在 `configured` 为真时渲染
+  `<section data-plugin-config>`，内容来自 keyed 槽位 `plugins.bundle.config`，键为**包名**
+  （`client-ui-plugin-manager/lib/client.js:2974`：
+  `renderSlot("plugins.bundle.config", { view: "page" }, { entryKey: pkg.name })`）。
+- 客户端因此在同一 bundle 内再注册一个 keyed entry：
+  `{ name: 'plugins.bundle.config', key: 'dsh-enhanced-prompt', id: 'enhanced-prompt-settings' }`，
+  插件页就会出现设置区块（槽位目录里声明为 `kind: "keyed"`, scope root）。
+- 卡片自包含：用既有的同源桥 `POST /enhance/api` 读 `settings`、写 `saveSettings`，新增
+  `resetSettings`（删除 `$DSH_HOME/enhanced-prompt.settings.json` 回到 profile 配置）。
+  不依赖宿主的 `configForms`/schema 服务，也不需要额外清单字段。
+- 表单字段与 ⚙ 弹层共用同一份 `FIELDS` 定义，避免两处漂移。
+
+验证：
+
+```text
+86/86 unit tests（新增：桥的 resetSettings、客户端卡片加载 / 保存 / 恢复默认）
+client.js 内含 plugins.bundle.config 与 resetSettings
+profile 安装副本：dsh-enhanced-prompt 1.4.2（来自 github:）
+Host 日志：activated v1.4.2 …
+桥 ping：{"ok":true,"version":"1.4.2",…}
+Release：v1.4.2 — plugin page settings（CI 绿）
+```
+
+注意：客户端 bundle 变更需**刷新页面**后新注册才生效（Host 侧代码变更需重启）。
+
+---
+
 ## 7.11 v1.4.1：在真实 DSH 里验证 `github:` 安装
 
 目标：证明他人可以用 `github:mowei1600/dsh-enhanced-prompt` 这种格式装进 DSH 并真正被加载，
